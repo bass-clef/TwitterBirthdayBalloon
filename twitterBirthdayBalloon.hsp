@@ -1,0 +1,337 @@
+
+
+	#packopt	name	"twitterBirthdayBalloon"
+	#packopt	icon	"tbbicon.ico"
+	#packopt	version	"version.txt"
+	#packopt	hide	1
+	
+	#bootopt	hsp64	0
+
+	#define		global	APP_NAME	"twitterBirthdayBalloon"
+
+
+	#uselib "user32.dll"
+	#func	setLayered			"SetLayeredWindowAttributes"	int, int, int, int
+	#uselib "kernel32.dll"
+	#cfunc	timeGetTime			"timeGetTime"
+	
+	#include "mod_img.as"
+	
+	#include DIR_HSPWORK\\list.as
+	
+	#include DIR_HSPWORK\\fpsex.as
+	#include DIR_HSPWORK\\gui.as
+	#include DIR_HSPWORK\\keys.as
+	#include DIR_HSPWORK\\sound.as
+	#include DIR_HSPWORK\\variableToFile.as"
+	#include DIR_HSPWORK\\window.as
+	
+	#enum	W_MAIN	= 0
+	#enum	W_WORK
+	#enum	W_WHITE
+	#enum	W_BLACK
+
+	#define LWA_COLORKEY		0x0001
+	#define LWA_ALPHA			0x0002
+	#define MM_MCINOTIFY		0x03B9
+
+	#define NOTE_C4 0x48
+	
+	initMain
+
+entryPoint *main
+	calcMain
+	drawMain
+	goto *main
+
+*pointerDown
+	mx = loword(lparam)
+	my = hiword(lparam)
+	downedTouch = true
+	downingTouch = true
+	touchBalloon
+	return
+*pointerUpdate
+	mx = loword(lparam)
+	my = hiword(lparam)
+	return
+*pointerUp
+	mx = loword(lparam)
+	my = hiword(lparam)
+	downingTouch = false
+	return
+
+#deffunc calcMain
+	frameCount = (frameCount+1) \ INT_MAX
+	
+	w = mousew
+	mx = ginfo_mx
+	my = ginfo_my
+	// キー
+	calcKeys
+	downingKey = false
+	downedKey = false
+	if keyDowned(keys.KEY_MAIN)		:downedKey = keys.KEY_MAIN
+	if keyDowned(keys.KEY_SUB)		:downedKey = keys.KEY_SUB
+	if keyDowning(keys.KEY_MAIN)	:downingKey = keys.KEY_MAIN
+	if keyDowning(keys.KEY_SUB)		:downingKey = keys.KEY_SUB
+	
+	// GUI
+	calcGUI mx, my, (false != downedKey) || (false != downedTouch), (false != downingKey) || (false != downingTouch), w < 0, 0 < w
+	downedTouch = false
+
+	calcApp
+	if downedButton(guiQuitId) :end
+	
+	return
+
+#deffunc touchBalloon
+	calcGUI mx, my, (false != downedTouch), (false != downingTouch), w < 0, 0 < w
+	it = getListBegin(list_balloon)
+	count = 0
+	prevNrComCount = nrComboCount
+	totalSpComboCount = 0
+	while -1 != it
+		nextIt = getListFront(it, list_balloon)
+		p = getGUIObjectPos(blGuiId.it)
+		x = loword(p)
+		y = hiword(p) - blSpeed.it
+		
+		delFlag = false
+		if downedButton(blGuiId.it) {
+			nowTime = timeGetTime()
+			addScore = normalScore * nrComboCount
+			if nowTime - prevTime < initMessageTime * 6 {
+				totalSpComboCount++
+				spComboCount++
+				addScore *= (spComboCount + 1)
+				message = "Combo "+ nrComboCount
+				if spComboCount :message += " + Same "+ spComboCount
+				makeMessageWindow message, x + loword(getGUIObjectSize(blGuiId.it)) / 2, y + fontSize
+			} else {
+				spComboCount = 0
+			}
+			makeMessageWindow "+ "+ addScore , x + loword(getGUIObjectSize(blGuiId.it)) / 2, y
+			
+			score += addScore
+			
+			if level * 3 * normalScore < score {
+				level++
+			}
+			delFlag = true
+
+			prevTime = nowTime
+			nrComboCount++
+		}
+		if true == delFlag {
+			if false == delFlag :nrComboCount = 0
+			destroyGUIObject blGuiId.it
+			eraseList it, list_balloon
+		}
+		it = nextIt
+		count++
+		await
+	wend
+	
+		addNote = int(canonNoteAdjustmentList.noteCount)
+		noteBase = addNote \ 12
+		while noteBase < 0 :noteBase += 12 :wend
+		if addNote == noteBase :noteBase += 12
+		len = limit(totalSpComboCount, 1 < nrComboCount, 7)
+		n = -len / 3 * 2
+		repeat len
+			playNote NOTE_C4 + addNote + 12*n, 100
+			n++
+			if 0 == n :n++
+		loop
+		mciplay 0, 300
+		
+		playNote NOTE_C4 + addNote, 127
+		noteCount = (noteCount + 1) \ length(canonNoteAdjustmentList)
+	
+	changeGuiText guiScoreId, "Score : "+ strf("%1.30g", score)
+	changeGuiText guiLevelId, "Level : "+ level
+	return
+
+#deffunc calcApp
+
+	it = getListBegin(list_message)
+	while -1 != it
+		nextIt = getListFront(it, list_message)
+		messageTime.it--
+		if messageTime.it < 0 {
+			destroyGUIObject msgGuiId.it
+			eraseList it, list_message
+		}
+		it = nextIt
+	wend
+	
+	it = getListBegin(list_balloon)
+	count = 0
+	while -1 != it
+		nextIt = getListFront(it, list_balloon)
+		p = getGUIObjectPos(blGuiId.it)
+		x = loword(p)
+		y = hiword(p) - blSpeed.it
+		pos x, y :moveGUIObject blGuiId.it
+		if y + hiword(getGUIObjectSize(blGuiId.it)) < 0 {
+			if false == delFlag :nrComboCount = 0
+			destroyGUIObject blGuiId.it
+			eraseList it, list_balloon
+		}
+		it = nextIt
+		count++
+		await
+	wend
+
+	if count < limit(3*level, 1, 100) {
+		if 0 == rnd( limit(10 - level, 1, 10) ) :makeBalloon
+	}
+	return
+
+#deffunc makeBalloon
+	id = pushListFront(getListEnd(list_balloon), list_balloon)
+	blColorId.id = rnd( length(balloonName) )
+	blid = balloonImageId.blColorId(id)
+	blSpeed.id = 1 + rnd(3)
+	
+	guiOption getWindowWidth(blid), getWindowHeight(blid), GUI_S_SHOW
+	color
+	pos rnd(ginfo_dispx - getWindowWidth(blid)), ginfo_dispy
+	makeImageButton blid, getWindowWidth(blid), getWindowHeight(blid) :blGuiId.id = stat
+	setGUIBackAlpha blGuiId.id, 0
+	return
+#deffunc makeMessageWindow str _message, int _x, int _y
+	id = pushListFront(getListEnd(list_message), list_message)
+	messageList.id = _message
+	messageTime.id = initMessageTime
+	wdh = fhSize * strlen(messageList.id) + 2
+	guiOption wdh, fontSize, GUI_S_SHOW
+	colorwhite
+	pos _x - wdh/2, _y :makeText _message
+	msgGuiId.id = stat
+	setGUIBackAlpha msgGuiId.id, 0
+	
+	return
+	
+#deffunc drawMain
+	redraw 0
+	color 1, 1, 1 :boxf
+
+	drawGui
+
+	redraw 1
+	
+	return
+	
+#deffunc initMain
+
+	#enum	KEY_MAIN	= 0
+	#enum	KEY_SUB
+	#enum	KEY_MAX
+	
+	randomize
+	initFramesPerSecond 120, 10
+	initKeys
+	keys.KEY_MAIN		= 1
+	keys.KEY_SUB		= 2
+	repeat KEY_MAX
+		registoryKey keys.cnt, 1, 10
+	loop
+	
+	initList INT_MAX, list_balloon
+	initList INT_MAX, list_message
+	dim blWindowId
+	dim blColorId
+	initMessageTime = 40
+	normalScore = 100
+	score = 0.0
+	level = 0
+	balloonName = "blue", "green", "purple", "red", "yellow"
+	beepScale = 2093, 2349, 2637, 2793, 3135, 3520, 3951, 4186
+	baseNote = 0x48
+	//  1 3   6 8 10
+	// 0 2 4 5 7 9  11
+	//    -11   -9     -6  -4  -2
+	// -12   -10  -8 -7  -5  -3  -1
+	canonNoteAdjustmentString = "9 6 7 9 6 7 9 -3 -1 1 2 4 6 7 6 2 4 6 -6 -5 -3 -1 -3 -5 -3 2 1 2 -5 -1 -3 -5 -6 -8 -6 -8 -10 -8 -6 -1 -3 -1 -5 -1 -3 -1 1 2 -3 -1 1 2 4 6 7 9"
+	split canonNoteAdjustmentString, " ", canonNoteAdjustmentList
+	noteScaleAdd = -12, -10, -8, -7, -5, -3, -1, 0, 2, 4, 5, 7, 9, 11, 12
+	noteScaleAddBase = 7
+	
+	fontSize = 16
+	fhSize = fontSize/2
+	xMargin = 5
+	yMargin = 5
+
+	loadArray dir_cur +"\\score.dat", score, 1
+	loadArray dir_cur +"\\level.dat", level, 1
+	loadArray dir_cur +"\\combo.dat", nrComboCount, 1
+	
+	initWindow
+	windowList.W_MAIN = getWindowId(ginfo_dispx, ginfo_dispy)
+	windowList.W_WORK = getBufferId(ginfo_dispx, ginfo_dispy)
+	windowList.W_WHITE = getBufferId(ginfo_dispx, ginfo_dispy)
+	windowList.W_BLACK = getBufferId(ginfo_dispx, ginfo_dispy)
+	
+	screen mainWindowId, 500, 60, 0, (ginfo_dispx-500)/2, (ginfo_dispy-20)/2
+	color :boxf :colorwhite
+	font msgothic, fontSize
+	mes "初期化中...\n※音がなります。\n作業中のウィンドウを閉じたほうがいいかも？"
+	title "Happy Birthday!!"
+	
+	repeat length(balloonName)
+		balloonImageId.cnt = makeImageBuffer(dir_cur +"\\"+ balloonName.cnt +".png")
+		gsel balloonImageId.cnt
+		color :boxf
+		pos 0, 0 :imgload dir_cur +"\\"+ balloonName.cnt +".png"
+	loop
+
+	mciopen "handclap.wav", 0, 100
+	
+	buffer windowList.W_WORK, getWindowWidth(windowList(W_WORK)), getWindowHeight(windowList(W_WORK))
+	font msgothic, fontSize
+	
+	buffer windowList.W_WHITE, getWindowWidth(windowList(W_WHITE)), getWindowHeight(windowList(W_WHITE))
+	colorwhite :boxf
+	
+	buffer windowList.W_BLACK, getWindowWidth(windowList(W_BLACK)), getWindowHeight(windowList(W_BLACK))
+	color :boxf
+	
+	bgscr mainWindowId, ginfo_dispx-1, ginfo_dispy, 2, 1, 0
+	slong hwnd, GWL_EXSTYLE, glong(hwnd, GWL_EXSTYLE) | WS_EX_LAYERED
+	setLayered hwnd, RGB(1, 1, 1), 128, LWA_COLORKEY
+	title "Happy Birthday!!"
+	font msgothic, 16
+	oncmd gosub *pointerDown, WM_POINTERDOWN
+	oncmd gosub *pointerUp, WM_POINTERUP
+	oncmd gosub *pointerUpdate, WM_POINTERUPDATE
+	oncmd gosub *pointerDown, WM_LBUTTONDOWN
+	oncmd gosub *pointerUp, WM_LBUTTONUP
+	oncmd gosub *pointerUpdate, WM_MOUSEMOVE
+	
+	initGUI windowList.W_BLACK, windowList.W_WHITE, windowList.W_WORK, fhSize, xMargin, yMargin
+
+	inWindowId = getBufferId(1, 1)
+	pos 40, 40 :makeWindow "Happy Birthday!!", 300, 60, inWindowId :guiInWindowId = stat
+	guiOption 300, 20, GUI_S_SHOW
+	pos 0, 0
+	colorwhite
+	makeText "Score : "+ score :guiScoreId = stat
+	makeText "Level : "+ level :guiLevelId = stat
+	makeButton "Quit" :guiQuitId = stat
+	setGUIParent guiScoreId, guiInWindowId
+	setGUIParent guiLevelId, guiInWindowId
+	setGUIParent guiQuitId, guiInWindowId
+	
+	mciopen "soundless.wav", 1, 1
+	mciplay 1, 10, true
+	gsel mainWindowId, 2
+	return
+
+#deffunc exitMain onexit
+	saveArray dir_cur +"\\score.dat", score,,, 1
+	saveArray dir_cur +"\\level.dat", level,,, 1
+	saveArray dir_cur +"\\combo.dat", nrComboCount,,, 1
+	
+	return

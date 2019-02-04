@@ -1,0 +1,11 @@
+_FILEVERSION=1.0.0.0
+_PRODUCTVERSION=1.0.0.0
+Comments=HappyBirthday!!!
+CompanyName=Humi@bass_clef_
+FileDescription=HappyBirthday!!!
+FileVersion=1.00
+InternalName=Humi
+LegalCopyright=Copyright (C) 2019 Humi@bass_clef_
+OriginalFilename=TwitterBirthdayBalloon.exe
+ProductName=Humi
+ProductVersion=1.00
